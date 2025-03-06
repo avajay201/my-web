@@ -110,16 +110,39 @@
 #         else:
 #             answer(command)
 
+# import requests
+
+# response = requests.get('https://www.youtube.com/watch?v=oLHivRyXzE8', headers={
+#     "Cookie": "LOGIN_INFO=AFmmF2swRgIhAKFC9HF0waQ-DkfrRPiMcsPDVT5S9fpRtpyykPWP3o80AiEAtojvJVtPG9R0qrYbQ7eVVc-GQFRqSP6NLN_7ryOG1RA:QUQ3MjNmeVE1VmF2LVFUeGhFY0dNMGJHdUtnOVRubG9SWHZ4eFdEVUxhc0lsUUJNZXJoUXJObzRmVTd3eUtMMGFmemZHUVIxenlZMXhYQ0tTNDFsS29jRkpGZmo2ZEhoQXVNV1hWYXFPMDhuSnBfYlJ3QzhNSGp5LWY1amRxV1g0MVZWMUVzODZGR1BZNUlqbmpGcnMzNVVrZGt3VFhyUC1n; VISITOR_INFO1_LIVE=zXxFUxNYULU; VISITOR_PRIVACY_METADATA=CgJJThIEGgAgOA%3D%3D; HSID=AoNFZi0DNQIBFd_Cv; SSID=A11c6GpVw-7LlSeJA; APISID=4R0A_U_etOT3jYJ9/A1nBp0LMfhB16HmKc; SAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-1PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-3PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; SID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgrjbc8JEkgke6VpDSg7rYFAACgYKAX8SARASFQHGX2MiK4Ssz74Cac0TufTXexzgsRoVAUF8yKqihxmizdlk4JUPO5t1voCU0076; __Secure-1PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgPHlRQFHioNr-zIMyfvmXgQACgYKAaQSARASFQHGX2MiTjqyXGV08AM8XEHhfUj1lBoVAUF8yKoOKWAAJ6IustZPehgpx1Ec0076; __Secure-3PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgm1uvrig348MINIjL08BAagACgYKAcwSARASFQHGX2MiqypJigxPiv8qY_vTzeWegBoVAUF8yKpz9VAUysLKEey5Q_6Mt8DP0076; PREF=tz=Asia.Calcutta&f4=4000000&f7=150&f6=40000000; YSC=tV--KsiT4Dw; __Secure-ROLLOUT_TOKEN=COClz9Gn5aXa9QEQ_MWQ-KPXiQMY5-3Q-_z1iwM%3D; __Secure-1PSIDTS=sidts-CjEBEJ3XV1yHPc9kMV54H-NC9SxRuKYVubYhuhEOHYJ9XkaVcn8M0ytSLQegFZACz-6qEAA; __Secure-3PSIDTS=sidts-CjEBEJ3XV1yHPc9kMV54H-NC9SxRuKYVubYhuhEOHYJ9XkaVcn8M0ytSLQegFZACz-6qEAA; SIDCC=AKEyXzV1nt0TdbUEDl2_hi6So1CIdCadkgIupGadtD47STnzCz7g9UUT8NmYEhv_9PTvbSJPdA; __Secure-1PSIDCC=AKEyXzVaIkrmZHHR6uYPuex0KL7-QUQmbMicixy6EaV4Qs0FCJkzD49micpqBQIo-iFGJu9icQ; __Secure-3PSIDCC=AKEyXzWLOlD-",
+#     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36"
+# })
+
+# if response.status_code == 200:
+#     with open('data.html', 'wb') as f:
+#         f.write(response.content)
+# else:
+#     print('Failed!', response.status_code)
 
 
+# from pytube import YouTube
 
-class Meta(type):
-    def __new__(cls, name, bases, dct):
-        print(cls, f"Creating class {name}", bases, dct)
-        return super().__new__(cls, name, bases, dct)
-
-class MyClass(Meta, metaclass=Meta):
-    a = 10
-    def test():
-        pass
-
+# def get_youtube_comments(video_url):
+#     yt = YouTube(video_url)
+#     print(dir(yt))
+#     # print(f"Title: {yt.title}")
+#     print(f"Views: {yt.views}")
+#     print(f"Author: {yt.author}")
+#     print(f"Channel URL: {yt.channel_url}")
+#     print(f"Publish Date: {yt.publish_date}")
+#     print(f"Rating: {yt.rating}")
+#     print(f"Description: {yt.description}")
+#     print(f"Thumbnail: {yt.thumbnail_url}")
+    
+# Test with a YouTube video
+# get_youtube_comments("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
+from itertools import islice
+from youtube_comment_downloader import *
+downloader = YoutubeCommentDownloader()
+comments = downloader.get_comments_from_url('https://www.youtube.com/watch?v=oLHivRyXzE8', sort_by=SORT_BY_POPULAR)
+for i, comment in enumerate(islice(comments, 100)):
+    print(i+1, comment['text'])
