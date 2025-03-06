@@ -266,8 +266,6 @@ def get_posts(username, posts=30):
         import json
         response = requests.post(url, headers=headers, data=data)
         data = response.json()
-        with open('data.json', 'w') as f:
-            json.dump(data, f, indent=4)
         if response.status_code == 200:
             # Extract the post feed data
             user_feed_data = data.get('data', {}).get('xdt_api__v1__feed__user_timeline_graphql_connection', {}) if data.get('data', {}) else {}

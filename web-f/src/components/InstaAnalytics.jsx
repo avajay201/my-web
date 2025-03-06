@@ -47,7 +47,7 @@ function InstaAnalytics() {
     setError("");
 
     try {
-      const response = await axios.post('https://192.168.1.68:5000/insta-analytics', {'username': username.trim()});
+      const response = await axios.post('https://192.168.1.32:5000/insta-analytics', {'username': username.trim()});
       if (Object.keys(response.data).length > 0){
         setData(response.data);
         setLast30pLikes(response.data.analytics.last_30p_likes);
@@ -104,21 +104,21 @@ function InstaAnalytics() {
       {data && (
         <div className="mt-6 w-full max-w-4xl">
           <a href={`https://www.instagram.com/${data.profile.username}`} target="_blank" rel="noopener noreferrer">
-          <Card className="p-4 flex items-center gap-4 bg-gray-800 rounded-lg">
-            <img 
-              src={`https://192.168.1.68:5000/fetch-image?url=${encodeURIComponent(data.profile.profile_pic)}`} 
-              alt="Profile" 
-              className="w-16 h-16 rounded-full" 
-            />
-            <div>
-              <h2 className="text-xl font-bold flex items-center gap-1">
-                {data.profile.full_name}
-                {data.profile.is_verified && <CheckCircle className="text-blue-500 w-5 h-5" />}
-              </h2>
-              <p>@{data.profile.username}</p>
-              <p>{data.profile.biography}</p>
-            </div>
-          </Card>
+            <Card className="p-4 flex items-center gap-4 bg-gray-800 rounded-lg">
+              <img 
+                src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.profile.profile_pic)}`} 
+                alt="Profile" 
+                className="w-16 h-16 rounded-full" 
+              />
+              <div>
+                <h2 className="text-xl font-bold flex items-center gap-1">
+                  {data.profile.full_name}
+                  {data.profile.is_verified && <CheckCircle className="text-blue-500 w-5 h-5" />}
+                </h2>
+                <p>@{data.profile.username}</p>
+                <p>{data.profile.biography}</p>
+              </div>
+            </Card>
           </a>
 
           <div className="grid grid-cols-3 gap-4 mt-6">
@@ -133,6 +133,36 @@ function InstaAnalytics() {
             <Card className="p-4 text-center bg-gray-800 rounded-lg" style={{flexDirection: "column", display: "flex", justifyContent: "center", alignItems: "center"}}>
               <h3 className="text-base sm:text-lg font-bold">Total Posts</h3>
               <p>{data.profile.posts}</p>
+            </Card>
+          </div>
+
+          {data.latest_post && data.latest_post.post_media && (
+            <a href={data.latest_post.post_url} target="_blank" rel="noopener noreferrer">
+              <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center mt-6">
+                <h3 className="text-base sm:text-lg font-bold">Latest Post</h3>
+                <img
+                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.latest_post.post_media)}`}
+                  alt="Latest Post"
+                  className="w-full h-48 object-contain rounded-lg mt-2"
+                />
+                <p className="text-sm sm:text-base">{data.latest_post.likes} Likes</p>
+                <p className="text-sm sm:text-base">{data.latest_post.comments} Comments</p>
+              </Card>
+            </a>
+          )}
+
+          <Card className="p-4 bg-gray-800 rounded-lg text-center mt-6">
+            <p className="text-gray-300 text-sm" style={{fontWeight: 'bold'}}>Total likes and comments from the Last 30 Posts</p>
+          </Card>
+
+          <div className="grid grid-cols-2 gap-4 mt-6">
+            <Card className="p-4 text-center bg-gray-800 rounded-lg" style={{flexDirection: "column", display: "flex", justifyContent: "center", alignItems: "center"}}>
+              <h3 className="text-base sm:text-lg font-bold">Total Likes</h3>
+              <p>{data.analytics.total_likes}</p>
+            </Card>
+            <Card className="p-4 text-center bg-gray-800 rounded-lg" style={{flexDirection: "column", display: "flex", justifyContent: "center", alignItems: "center"}}>
+              <h3 className="text-base sm:text-lg font-bold">Total Comments</h3>
+              <p>{data.analytics.total_comments}</p>
             </Card>
           </div>
           
@@ -206,7 +236,7 @@ function InstaAnalytics() {
               <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center">
                 <h3 className="text-base sm:text-lg font-bold">Most Liked Post</h3>
                 <img
-                  src={`https://192.168.1.68:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_liked_post.post_media)}`}
+                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_liked_post.post_media)}`}
                   alt="Most Liked"
                   className="w-full h-48 object-contain rounded-lg mt-2"
                 />
@@ -218,7 +248,7 @@ function InstaAnalytics() {
               <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center">
                 <h3 className="text-base sm:text-lg font-bold">Most Commented Post</h3>
                 <img
-                  src={`https://192.168.1.68:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_commented_post.post_media)}`}
+                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_commented_post.post_media)}`}
                   alt="Most Commented"
                   className="w-full h-48 object-contain rounded-lg mt-2"
                 />
