@@ -72,7 +72,7 @@
 #         print("Could not request results from Google Speech Recognition.")
 
 # def answer(cmd):
-#     API_KEY = "AIzaSyCxQOEEj1YWE7SaP1tMG3Ug_jwqYPIJpZI"
+#     API_KEY = ""
 
 #     # API URL
 #     url = f"https://generativelanguage.googleapis.com/v1beta/models/gemini-2.0-flash:generateContent?key={API_KEY}"
@@ -98,17 +98,58 @@
 
 #     # Print response
 #     if response.status_code == 200:
-#         print(response.json())  # Full response
+#         # print(response.json())  # Full response
 #         print("Response:", response.json()["candidates"][0]["content"]["parts"][0]["text"])  # Extracted text
 #     else:
 #         print("Error:", response.status_code, response.text)
 # if __name__ == '__main__':
-#     while True:
-#         command = listen()
-#         if not command:
-#             print('Listening error, please say again!')
-#         else:
-#             answer(command)
+# while True:
+    # command = listen()
+    # if not command:
+    #     print('Listening error, please say again!')
+    # else:
+    #     answer(command)
+
+from openai import OpenAI
+
+YOUR_API_KEY = "INSERT API KEY HERE"
+def answer(command):
+    messages = [
+        {
+            "role": "system",
+            "content": (
+                "You are an artificial intelligence assistant and you need to "
+                "engage in a helpful, detailed, polite conversation with a user."
+            ),
+        },
+        {   
+            "role": "user",
+            "content": (
+                command
+            ),
+        },
+    ]
+
+    client = OpenAI(api_key=YOUR_API_KEY, base_url="https://api.perplexity.ai")
+
+    # chat completion without streaming
+    response = client.chat.completions.create(
+        model="sonar-pro",
+        messages=messages,
+    )
+    print(response)
+
+    # chat completion with streaming
+    response_stream = client.chat.completions.create(
+        model="sonar-pro",
+        messages=messages,
+        stream=True,
+    )
+    for response in response_stream:
+        print(response)
+command ='''Give me answer in short response with better response of this query -
+            Tell me some dunder method in oops.'''
+answer(command)
 
 # import requests
 
@@ -140,9 +181,64 @@
     
 # Test with a YouTube video
 # get_youtube_comments("https://www.youtube.com/watch?v=dQw4w9WgXcQ")
-from itertools import islice
-from youtube_comment_downloader import *
-downloader = YoutubeCommentDownloader()
-comments = downloader.get_comments_from_url('https://www.youtube.com/watch?v=oLHivRyXzE8', sort_by=SORT_BY_POPULAR)
-for i, comment in enumerate(islice(comments, 100)):
-    print(i+1, comment['text'])
+# from itertools import islice
+# from youtube_comment_downloader import *
+# downloader = YoutubeCommentDownloader()
+# comments = downloader.get_comments_from_url('https://www.youtube.com/watch?v=oLHivRyXzE8', sort_by=SORT_BY_POPULAR)
+# for i, comment in enumerate(islice(comments, 100)):
+#     print(i+1, comment['text'])
+
+# import requests
+# from bs4 import BeautifulSoup
+# import re
+# import json
+
+
+# url = 'https://www.youtube.com/watch?v=AZeU5_YpqsA'
+
+# response = requests.get(url)
+# if response.status_code == 200:
+#     with open('data.html', 'w') as f:
+#         f.write(response.text)
+
+#     soup = BeautifulSoup(response.text, 'html.parser')
+
+#     nonce_value = "i6mQo2ZNkoQ4oGY7o82WAw"
+#     scripts = soup.find_all('script')
+
+    # if scripts:
+    #     print(len(scripts))
+    #     match = re.search(r'(\{.*\})', str(scripts[46]))
+    #     if match:
+    #         json_data = json.loads(match.group(1))
+    #         with open('script.json', 'w') as f:
+    #             json.dump(json_data, f, indent=4)
+    #         print("Extracted JSON-like object:", json_data)
+    #     else:
+    #         print("No JSON-like object found")
+    # else:
+    #     print('No matching <script> tags found')
+
+# with open('script.json') as f:
+#     data = json.load(f)
+
+# print(data["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"][-1]["itemSectionRenderer"]["contents"][0]["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"])
+# def extract_keys(obj, keys):
+#     result = {}
+#     if isinstance(obj, dict):
+#         for key, value in obj.items():
+#             if key in keys:
+#                 result[key] = value
+#             else:
+#                 nested = extract_keys(value, keys)
+#                 if nested:
+#                     result[key] = nested
+#     elif isinstance(obj, list):
+#         nested_list = [extract_keys(item, keys) for item in obj]
+#         result = [item for item in nested_list if item]
+#     return result
+
+# specific_keys = ["continuationCommand", "lat", "email", "skills"]
+# filtered_data = extract_keys(data, specific_keys)
+
+# print("Filtered Data:", json.dumps(filtered_data, indent=4))

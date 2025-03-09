@@ -5,11 +5,12 @@ import { Card, CardContent } from "./ui/card";
 import { Input } from "./ui/input";
 import { Loader2, Eye } from "lucide-react";
 import axios from "axios";
+import { BASE_URL } from "../others/APIs";
 
 
-function WebScraping() {
-  const [scrapers, setScrapers] = useState([]);
-  const [selectedScraper, setSelectedScraper] = useState(null);
+function SentimentAnalyzer() {
+  const [analyzers, setAnalyzers] = useState([]);
+  const [selectedAnalyzer, setSelectedAnalyzer] = useState(null);
   const [searchKey, setSearchKey] = useState("");
   const [loading, setLoading] = useState(false);
   const [result, setResult] = useState([]);
@@ -25,8 +26,8 @@ function WebScraping() {
 
   const fetchScrapers = async () => {
     try {
-      const response = await axios.get(`${BASE_URL}/scrapers`);
-      setScrapers(response.data);
+      const response = await axios.get(`${BASE_URL}/sentiment-analyzers`);
+      setAnalyzers(response.data);
     }
     catch (error) {
       console.log('Error:', error);
@@ -95,7 +96,7 @@ function WebScraping() {
   }, [loading]);
 
   const handleSearch = async () => {
-    if (!selectedScraper || !searchKey.trim()) {
+    if (!selectedAnalyzer || !searchKey.trim()) {
       setErrorMessage("Please select a scraper and enter a search keyword!");
       setTimeout(() => setErrorMessage(""), 2000);
       return;
@@ -113,7 +114,7 @@ function WebScraping() {
     setLoading(true);
 
     try {
-      const search_from = selectedScraper;
+      const search_from = selectedAnalyzer;
       const response = await axios.post(`${BASE_URL}/scrape`, {
         search_key: searchKey,
         search_from: search_from,
@@ -148,20 +149,22 @@ function WebScraping() {
         animate={{ opacity: 1, y: 0 }}
         transition={{ duration: 0.5 }}
       >
-        Web Scraping
+        Sentiment Analyzer
       </motion.h1>
 
-      <div className="mt-8 grid grid-cols-1 sm:grid-cols-2 md:grid-cols-4 gap-4 w-full max-w-4xl">
-        {scrapers.map((scraperObj, index) => {
+      <div
+        className={`mt-8 grid gap-4 w-full max-w-4xl ${analyzers.length === 1 ? "grid-cols-1 place-items-center" : "grid-cols-1 sm:grid-cols-2 md:grid-cols-4"}`}
+      >
+        {analyzers.map((scraperObj, index) => {
           const [name, value] = Object.entries(scraperObj)[0];
 
           return (
             <motion.div whileTap={{ scale: loading ? 1 : 0.9 }} key={index}>
               <Card
-                className={`p-4 text-center cursor-pointer rounded-lg transition-all duration-300 border-2 ${selectedScraper === value ? "border-blue-500" : "border-gray-700"
+                className={`p-4 text-center cursor-pointer rounded-lg transition-all duration-300 border-2 ${selectedAnalyzer === value ? "border-blue-500" : "border-gray-700"
                   } ${loading ? "cursor-progress opacity-50" : ""}`}
-                style={{ cursor: loading ? "progress" : "pointer" }}
-                onClick={() => !loading && setSelectedScraper(value)}
+                style={{ cursor: loading ? "progress" : "pointer", width: analyzers.length === 1 ? "300px" : "auto" }}
+                onClick={() => !loading && setSelectedAnalyzer(value)}
               >
                 <CardContent>{name}</CardContent>
               </Card>
@@ -172,7 +175,7 @@ function WebScraping() {
 
       <Input
         type="text"
-        placeholder="Enter search keyword"
+        placeholder="Enter a video url"
         className={`mt-6 p-3 text-white border border-white rounded-lg w-full max-w-lg bg-transparent placeholder-gray-300 focus:outline-none focus:ring-2 focus:ring-white 
         ${loading ? "opacity-50 cursor-not-allowed" : ""}`}
         value={searchKey}
@@ -187,7 +190,7 @@ function WebScraping() {
         className="mt-4 bg-blue-500 text-white px-6 py-3 rounded-lg flex items-center gap-2 transition-all duration-300"
         style={{ backgroundColor: "oklch(0.54 0.05 264.51 / 0.5)", cursor: loading && "progress", pointerEvent: loading && "none", color: loading && "gray" }}
       >
-        Scrape
+        Analyze
       </Button>
 
       {
@@ -408,4 +411,4 @@ function WebScraping() {
   );
 }
 
-export default WebScraping;
+export default SentimentAnalyzer;

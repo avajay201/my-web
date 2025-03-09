@@ -3,6 +3,7 @@ import { motion } from "framer-motion";
 import { Card, CardContent } from "./ui/card";
 import { Loader2, CheckCircle, Upload } from "lucide-react";
 import axios from "axios";
+import { BASE_URL } from "../others/APIs";
 
 
 function FaceRecognition() {
@@ -44,7 +45,7 @@ function FaceRecognition() {
     formData.append("image", selectedImage);
 
     try {
-      await axios.post("https://192.168.1.68:5000/detect_face", formData);
+      await axios.post(`${BASE_URL}/detect_face`, formData);
       startCamera();
     } catch (error) {
       setSelectedImage(null);
@@ -112,7 +113,7 @@ function FaceRecognition() {
         formData.append("frame", blob);
         try {
           queue = true;
-          const response = await axios.post("https://192.168.1.68:5000/compare_faces", formData);
+          const response = await axios.post(`${BASE_URL}/compare_faces`, formData);
           console.log('Response:', response)
           setVerificationStatus(response.data.matched ? "verified" : "not_verified");
           setTimeout(() => {

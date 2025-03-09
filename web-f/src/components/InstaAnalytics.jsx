@@ -6,6 +6,7 @@ import { Input } from "./ui/input";
 import { Loader2, CheckCircle } from "lucide-react";
 import { LineChart, Line, XAxis, YAxis, Tooltip, ResponsiveContainer } from "recharts";
 import axios from "axios";
+import { BASE_URL } from "../others/APIs";
 
 
 function CustomTooltip({ active, payload, label, secondLabel = 'Posts' }) {
@@ -47,7 +48,7 @@ function InstaAnalytics() {
     setError("");
 
     try {
-      const response = await axios.post('https://192.168.1.32:5000/insta-analytics', {'username': username.trim()});
+      const response = await axios.post(`${BASE_URL}/insta-analytics`, {'username': username.trim()});
       if (Object.keys(response.data).length > 0){
         setData(response.data);
         setLast30pLikes(response.data.analytics.last_30p_likes);
@@ -106,7 +107,7 @@ function InstaAnalytics() {
           <a href={`https://www.instagram.com/${data.profile.username}`} target="_blank" rel="noopener noreferrer">
             <Card className="p-4 flex items-center gap-4 bg-gray-800 rounded-lg">
               <img 
-                src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.profile.profile_pic)}`} 
+                src={`${BASE_URL}/fetch-image?url=${encodeURIComponent(data.profile.profile_pic)}`} 
                 alt="Profile" 
                 className="w-16 h-16 rounded-full" 
               />
@@ -141,7 +142,7 @@ function InstaAnalytics() {
               <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center mt-6">
                 <h3 className="text-base sm:text-lg font-bold">Latest Post</h3>
                 <img
-                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.latest_post.post_media)}`}
+                  src={`${BASE_URL}/fetch-image?url=${encodeURIComponent(data.latest_post.post_media)}`}
                   alt="Latest Post"
                   className="w-full h-48 object-contain rounded-lg mt-2"
                 />
@@ -236,7 +237,7 @@ function InstaAnalytics() {
               <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center">
                 <h3 className="text-base sm:text-lg font-bold">Most Liked Post</h3>
                 <img
-                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_liked_post.post_media)}`}
+                  src={`${BASE_URL}/fetch-image?url=${encodeURIComponent(data.analytics.most_liked_post.post_media)}`}
                   alt="Most Liked"
                   className="w-full h-48 object-contain rounded-lg mt-2"
                 />
@@ -248,7 +249,7 @@ function InstaAnalytics() {
               <Card className="p-4 bg-gray-800 rounded-lg flex flex-col items-center">
                 <h3 className="text-base sm:text-lg font-bold">Most Commented Post</h3>
                 <img
-                  src={`https://192.168.1.32:5000/fetch-image?url=${encodeURIComponent(data.analytics.most_commented_post.post_media)}`}
+                  src={`${BASE_URL}/fetch-image?url=${encodeURIComponent(data.analytics.most_commented_post.post_media)}`}
                   alt="Most Commented"
                   className="w-full h-48 object-contain rounded-lg mt-2"
                 />

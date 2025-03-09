@@ -1,11 +1,17 @@
+from bs4 import BeautifulSoup
 import cv2
 from datetime import datetime, timedelta
 import face_recognition
+import json
 import numpy as np
+import re
 import requests
+import time
+from transformers import pipeline
 
 
 BASE_URL = 'https://www.instagram.com'
+# sentiment_analysis = pipeline("sentiment-analysis",model="siebert/sentiment-roberta-large-english")
 
 def rotate_image(image, angle):
     """
@@ -377,21 +383,216 @@ def process_instagram_data(profile, posts):
 
     return final_data
 
+def is_valid_url(url):
+    """
+    Check given url is correct url or not
+    """
+    regex = re.compile(
+        r'^(https?:\/\/)?'          # Optional http or https
+        r'([a-zA-Z0-9-]+\.)+'       # Subdomain or domain
+        r'[a-zA-Z]{2,}'             # Domain extension (like .com, .org)
+        r'(:\d+)?'                  # Optional port
+        r'(\/\S*)?$'                # Optional path
+    )
+    return bool(regex.match(url))
+
+def filter_token(json_data):
+    token = None
+    try:
+        token = json_data["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"][-1]["itemSectionRenderer"]["contents"][0]["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"]
+    except Exception as err:
+        print('Error', err)
+    return token
+
+def scrape_token(video_url):
+    token = None
+
+    try:
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+        }
+        response = requests.get(video_url, timeout=10, headers=headers)
+        if response.status_code == 200:
+            soup = BeautifulSoup(response.text, 'html.parser')
+            scripts = soup.find_all('script')
+            if scripts:
+                match = re.search(r'(\{.*\})', str(scripts[46]))
+                if match:
+                    json_data = json.loads(match.group(1))
+                    token = filter_token(json_data)
+                else:
+                    print("No JSON-like object found")
+            else:
+                print('No matching <script> tags found')
+    except Exception as err:
+        print('Error:', err)
+
+    return token
+
+def extract_continuation_command(data):
+    if isinstance(data, dict):
+        for key, value in data.items():
+            if key == "continuationCommand" and isinstance(value, dict):
+                return value.get("token")
+            result = extract_continuation_command(value)
+            if result:
+                return result
+    elif isinstance(data, list):
+        for item in data:
+            result = extract_continuation_command(item)
+            if result:
+                return result
+    return None
+
+def video_comments(video_url, token, total_comments_count, c):
+    url = 'https://www.youtube.com/youtubei/v1/next?prettyPrint=false'
+    headers = {
+        "Cookie": "LOGIN_INFO=AFmmF2swRgIhAKFC9HF0waQ-DkfrRPiMcsPDVT5S9fpRtpyykPWP3o80AiEAtojvJVtPG9R0qrYbQ7eVVc-GQFRqSP6NLN_7ryOG1RA:QUQ3MjNmeVE1VmF2LVFUeGhFY0dNMGJHdUtnOVRubG9SWHZ4eFdEVUxhc0lsUUJNZXJoUXJObzRmVTd3eUtMMGFmemZHUVIxenlZMXhYQ0tTNDFsS29jRkpGZmo2ZEhoQXVNV1hWYXFPMDhuSnBfYlJ3QzhNSGp5LWY1amRxV1g0MVZWMUVzODZGR1BZNUlqbmpGcnMzNVVrZGt3VFhyUC1n; VISITOR_INFO1_LIVE=zXxFUxNYULU; VISITOR_PRIVACY_METADATA=CgJJThIEGgAgOA%3D%3D; HSID=AoNFZi0DNQIBFd_Cv; SSID=A11c6GpVw-7LlSeJA; APISID=4R0A_U_etOT3jYJ9/A1nBp0LMfhB16HmKc; SAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-1PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-3PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; SID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgrjbc8JEkgke6VpDSg7rYFAACgYKAX8SARASFQHGX2MiK4Ssz74Cac0TufTXexzgsRoVAUF8yKqihxmizdlk4JUPO5t1voCU0076; __Secure-1PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgPHlRQFHioNr-zIMyfvmXgQACgYKAaQSARASFQHGX2MiTjqyXGV08AM8XEHhfUj1lBoVAUF8yKoOKWAAJ6IustZPehgpx1Ec0076; __Secure-3PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgm1uvrig348MINIjL08BAagACgYKAcwSARASFQHGX2MiqypJigxPiv8qY_vTzeWegBoVAUF8yKpz9VAUysLKEey5Q_6Mt8DP0076; PREF=tz=Asia.Calcutta&f4=4000000&f7=150&f6=40000000; YSC=tV--KsiT4Dw; __Secure-ROLLOUT_TOKEN=COClz9Gn5aXa9QEQ_MWQ-KPXiQMY5-3Q-_z1iwM%3D; __Secure-1PSIDTS=sidts-CjEBEJ3XV7OF4DtWBrsJVOnldfWNOyC-zPxKkc6ytWzX0XmCn3SZJkHtxkII1p33Fz_TEAA; __Secure-3PSIDTS=sidts-CjEBEJ3XV7OF4DtWBrsJVOnldfWNOyC-zPxKkc6ytWzX0XmCn3SZJkHtxkII1p33Fz_TEAA; SIDCC=AKEyXzXBv_Y-qG23Z26Kzch9nY5-ZHcpo0QmWcNe6GcKW6Hg9GdDjl5kYQV8kgmSLlUHKUa-PQ; __Secure-1PSIDCC=AKEyXzX6Ujm1z_SUSMf0r4thZZgd_84kDV6_x1Jff7CkgMrF4-g5rhg6QjqSxhg9oXRyIWHcDQ; __Secure-3PSIDCC=AKEyXzW-XbcQrs1OKgEG88ffdeZVb-Csx1TOsFmeNvD7yT9LxvBOvqrqdW9I5QpNLXMAxOrNKI0; ST-amrb2j=session_logininfo=AFmmF2swRgIhAKFC9HF0waQ-DkfrRPiMcsPDVT5S9fpRtpyykPWP3o80AiEAtojvJVtPG9R0qrYbQ7eVVc-GQFRqSP6NLN_7ryOG1RA%3AQUQ3MjNmeVE1VmF2LVFUeGhFY0dNMGJHdUtnOVRubG9SWHZ4eFdEVUxhc0lsUUJNZXJoUXJObzRmVTd3eUtMMGFmemZHUVIxenlZMXhYQ0tTNDFsS29jRkpGZmo2ZEhoQXVNV1hWYXFPMDhuSnBfYlJ3QzhNSGp5LWY1amRxV1g0MVZWMUVzODZGR1BZNUlqbmpGcnMzNVVrZGt3VFhyUC1n",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
+        "X-Goog-Visitor-Id": "Cgt6WHhGVXhOWVVMVSjWtae-BjIKCgJJThIEGgAgOA%3D%3D",
+    }
+    
+    json_data = {
+        "context": {
+            "client": {
+                "hl": "en",
+                "gl": "IN",
+                "remoteHost": "223.178.212.205",
+                "deviceMake": "",
+                "deviceModel": "",
+                "visitorData": "Cgt6WHhGVXhOWVVMVSiy6qy-BjIKCgJJThIEGgAgOA%3D%3D",
+                "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36,gzip(gfe)",
+                "clientName": "WEB",
+                "clientVersion": "2.20250304.01.00",
+                "osName": "Windows",
+                "osVersion": "10.0",
+                "originalUrl": "https://www.youtube.com/",
+                "screenPixelDensity": 1,
+                "platform": "DESKTOP",
+                "clientFormFactor": "UNKNOWN_FORM_FACTOR",
+                "configInfo": {
+                    "appInstallData": "CLLqrL4GEOHssAUQhL3OHBDL0bEFEOODuCIQ3q2xBRDv2c4cELby_xIQndCwBRCBzc4cEM3RsQUQ39zOHBCdprAFEPirsQUQ4OD_EhCU_rAFEJPZzhwQ8OLOHBCHrM4cENuvrwUQntvOHBC36v4SEMnmsAUQ0-GvBRCv5c4cELfbzhwQudnOHBC9irAFEN_YzhwQkYz_EhDk5_8SEIiHsAUQ1tjOHBC9tq4FEParsAUQ29rOHBDs3s4cEInorgUQmY2xBRCmmrAFEImwzhwQztrOHBCZmLEFEPyyzhwQ18GxBRDgzbEFEN68zhwQ-d3OHBCy6c4cEI3MsAUQiOOvBRC85rAFEInt_xIQyfevBRDM364FEJT8rwUQluTOHBC9mbAFEOLUrgUQ6-j-EhC72c4cELbgzhwQgNHOHBCQsM4cEJbezhwQo_j_EhCq2s4cEM-wzhwqKENBTVNHaFVSb0wyd0ROSGtCdlB0OFF1UDlBN3Ytd2JMSUxiREF4MEg%3D",
+                    "coldConfigData": "CLLqrL4GEO-6rQUQvbauBRDi1K4FEL2KsAUQndCwBRDP0rAFELzmsAUQ4_iwBRCkvrEFENfBsQUQktSxBRCJsM4cEJCwzhwQqLDOHBDPsM4cEPayzhwQ_LLOHBDkx84cEJHMzhwQqM7OHBCA0c4cENHWzhwQ5dbOHBDf2M4cEKrazhwQztrOHBCE284cEJPbzhwQntvOHBC3284cEN_czhwQ-d3OHBCW3s4cEOzezhwQvN_OHBC24M4cEPfhzhwQ8OLOHBCW5M4cEPLkzhwQr-XOHBCy6c4cEMjpzhwQh-vOHBDjg7giGjJBT2pGb3gzY0JNQjZ3Sl8xNmcyc1dwV2gzOTdhcVR6TjliME92aTBRbkhTTFdXMVZUUSIyQU9qRm94MXd3NVJCODRYcmtHeDVJdGtSS2FpU0NuWDZiMFV6Z1ZiR09MSGVuNk5BeFEqbENBTVNTdzBadU4yM0F0NFV6ZzJYSDZncXRRUzlGZjBEdXNlYkVQSVZ0d1AyRWFrVUZTNlpzYmNmaGFRRm1yc0dfMW00Z0FJRTVRU3Ryd2JqRWFnVjMxdThxZ2JXUHNkczMzcThpd2J2S0E9PQ%3D%3D",
+                    "coldHashData": "CLLqrL4GEhQxNDE0NzI1NzY1NDc2ODQ3MzM2Mhiy6qy-BjIyQU9qRm94M2NCTUI2d0pfMTZnMnNXcFdoMzk3YXFUek45YjBPdmkwUW5IU0xXVzFWVFE6MkFPakZveDF3dzVSQjg0WHJrR3g1SXRrUkthaVNDblg2YjBVemdWYkdPTEhlbjZOQXhRQmxDQU1TU3cwWnVOMjNBdDRVemcyWEg2Z3F0UVM5RmYwRHVzZWJFUElWdHdQMkVha1VGUzZac2JjZmhhUUZtcnNHXzFtNGdBSUU1UVN0cndiakVhZ1YzMXU4cWdiV1BzZHMzM3E4aXdidktBPT0%3D",
+                    "hotHashData": "CLLqrL4GEhQxMzEzNDE1NDE5NDQ0MzI1MTIwMhiy6qy-BiiU5PwSKKXQ_RIonpH-EijIyv4SKLfq_hIowIP_EiiRjP8SKLSj_xIopcf_Eii9zv8SKOvZ_xIo4OD_Eijk5_8SKInt_xIo0u3_Eij77f8SKNru_xIotvL_EijN8_8SKMT3_xIoo_j_EjIyQU9qRm94M2NCTUI2d0pfMTZnMnNXcFdoMzk3YXFUek45YjBPdmkwUW5IU0xXVzFWVFE6MkFPakZveDF3dzVSQjg0WHJrR3g1SXRrUkthaVNDblg2YjBVemdWYkdPTEhlbjZOQXhRQixDQU1TSFEwTW90ZjZGYTdCQnBOTjhnb1ZDZDNQd2d6R3AtMEwyTTBKcGNBRg%3D%3D"
+                },
+                "screenDensityFloat": 1.25,
+                "userInterfaceTheme": "USER_INTERFACE_THEME_DARK",
+                "timeZone": "Asia/Calcutta",
+                "browserName": "Chrome",
+                "browserVersion": "133.0.0.0",
+                "acceptHeader": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
+                "deviceExperimentId": "ChxOelEzT1RFek1EQTVOakkyTURZek1UVXdPUT09ELLqrL4GGLLqrL4G",
+                "rolloutToken": "COClz9Gn5aXa9QEQ_MWQ-KPXiQMYspmwr5n7iwM%3D",
+                "screenWidthPoints": 1536,
+                "screenHeightPoints": 360,
+                "utcOffsetMinutes": 330,
+                "connectionType": "CONN_CELLULAR_4G",
+                "memoryTotalKbytes": "8000000",
+                "mainAppWebInfo": {
+                    "graftUrl": video_url,
+                    "pwaInstallabilityStatus": "PWA_INSTALLABILITY_STATUS_CAN_BE_INSTALLED",
+                    "webDisplayMode": "WEB_DISPLAY_MODE_BROWSER",
+                    "isWebNativeShareAvailable": True
+                }
+            },
+            "user": {
+                "lockedSafetyMode": False
+            },
+            "request": {
+                "useSsl": True,
+                "internalExperimentFlags": [],
+                "consistencyTokenJars": []
+            },
+            "clickTracking": {
+                "clickTrackingParams": "CNIDELsvGAMiEwjzy-KDyviLAxXyb50JHeIIHB8="
+            }
+        },
+        "continuation": token
+    }
+
+    response = requests.post(url, headers=headers, timeout=10, json=json_data)
+    token = None
+    fetched_comments = []
+    # total_comments_count = 0
+    if response.status_code == 200:
+        data = response.json()
+        try:
+            token_key = ''
+            for key in data['onResponseReceivedEndpoints'][-1].keys():
+                if 'Continuation' in key:
+                    token_key = key
+                    break
+            token = extract_continuation_command(data['onResponseReceivedEndpoints'][-1][token_key]['continuationItems'][-1])
+        except KeyError as err:
+            print('Error in token:', err)
+            pass
+
+        with open(f'data/{c}.json', 'w') as f:
+            json.dump(data, f, indent=4)
+
+        if not total_comments_count:
+            try:
+                total_comments_count = data['onResponseReceivedEndpoints'][0]['reloadContinuationItemsCommand']['continuationItems'][0]['commentsHeaderRenderer']['countText']['runs'][0]['text']
+            except KeyError as err:
+                # print('Error in total comments count:', err)
+                pass
+
+        comments_data = data['frameworkUpdates']['entityBatchUpdate']['mutations']
+        for i, comment in enumerate(comments_data):
+            try:
+                payload = comment['payload']['commentEntityPayload']
+                fetched_comments.append(
+                    {
+                        'text': payload['properties']['content']['content'],
+                        'time': payload['properties']['publishedTime'],
+                        'owner': payload['author']['displayName'],
+                        'owner_avtar': payload['author']['avatarThumbnailUrl'],
+                        'likes': payload['toolbar']['likeCountLiked'],
+                        'dislikes': payload['toolbar']['likeCountNotliked'],
+                        'channel_url': f"https://www.youtube.com/{payload['author']['displayName']}",
+                    }
+                )
+            except KeyError as err:
+                # print('Error in comments:', err)
+                pass
+    else:
+        print('Something went wrong! Error Code:', response.status_code)
+
+    return total_comments_count, fetched_comments, token
+
 
 if __name__ == '__main__':
-    username = input('Enter a username: ')
-    if not username or username.isdigit() or username.isdecimal() :
-        print('Incorect/empty username!')
-        exit()
+    url = input('Enter a video URL: ')
+    if is_valid_url(url):
+        st = time.time()
+        token = scrape_token(url)
+        total_comments = 0
+        fetched_comments = []
+        counter = 0
+        while token is not None:
+            counter += 1
+            total_comments, comments, token = video_comments(url, token, total_comments, counter)
+            if comments:
+                total_comments = int(str(total_comments).replace(",", ""))
+                fetched_comments.extend(comments)
 
-    user_id = get_user_id(username)
-    if not user_id:
-        print('User not found!')
-        exit()
-    profile = get_profile(user_id)
-    print('Profile:', profile)
-    posts = get_posts(username)
-    if posts:
-        print(f"Posts: {posts}")
+            spent_time = int(time.time() - st)
+            if spent_time >= 60: # Process only for 1 minute
+                print(f'Spent {spent_time} seconds, stopping process stopped due to long time process.')
+                break
+            if not comments:
+                print('No comments')
+                break
+            if not token:
+                print('No token')
+                break
+
+        et = time.time()
+        with open('comments.json', 'w') as f:
+            json.dump(fetched_comments, f, indent=3)
+
+        print('Time:', int(et-st))
+        print('Total comments:', len(fetched_comments))
     else:
-        print(f"No posts found for {username}")
+        print("❌ Invalid URL")

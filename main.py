@@ -229,6 +229,17 @@ def proxy():
     except Exception:
         return "Image fetch failed", 500
 
+@app.route('/sentiment-analyzers', methods=['GET'])
+def sentiment_analyzers():
+    """
+    Supported Sentiment Analyzer Endpoint
+    
+    This endpoint returns a list of Sentiment Analyzer.
+
+    Response:
+        - 200: Returns a list of supported sources.
+    """
+    return jsonify([{ "YouTube": "ytb" }])
 
 if __name__ == '__main__':
     app.run(debug=True, host='0.0.0.0', ssl_context=('cert.pem', 'key.pem'))
