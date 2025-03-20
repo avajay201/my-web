@@ -1,17 +1,48 @@
-from bs4 import BeautifulSoup
-import cv2
-from datetime import datetime, timedelta
-import face_recognition
-import json
-import numpy as np
+# Standard Library Imports
 import re
-import requests
 import time
+import cv2
+import numpy as np
+import requests
+from datetime import datetime, timedelta
+import concurrent.futures
+from collections import Counter
+
+# Google API Imports
+from googleapiclient.discovery import build
+
+# NLTK (Natural Language Processing)
+import nltk
+from nltk.sentiment import SentimentIntensityAnalyzer
+from nltk.stem import WordNetLemmatizer
+from nltk.tokenize import word_tokenize
+from nltk.corpus import wordnet
+from nltk import pos_tag
+from nltk.corpus import wordnet, stopwords
+
+# Third-party NLP Libraries
 from transformers import pipeline
+from langdetect import detect
+from deep_translator import GoogleTranslator
+import emoji
 
+# Download necessary NLTK resources (if not already installed)
+nltk.download('wordnet', quiet=True)
+nltk.download('punkt', quiet=True)
+nltk.download('averaged_perceptron_tagger', quiet=True)
+nltk.download('vader_lexicon', quiet=True)
+nltk.download('stopwords', quiet=True)
 
+# Initialize transformers pipeline for emotion detection from text
+text_classifier = pipeline("text-classification", model="j-hartmann/emotion-english-distilroberta-base", device="cuda")
+
+# Initialize NLP Tools
+sia = SentimentIntensityAnalyzer()  # VADER for sentiment analysis
+lemmatizer = WordNetLemmatizer()
+stop_words = set(stopwords.words('english'))  # Load stopwords for English
+
+# Constants
 BASE_URL = 'https://www.instagram.com'
-# sentiment_analysis = pipeline("sentiment-analysis",model="siebert/sentiment-roberta-large-english")
 
 def rotate_image(image, angle):
     """
@@ -238,30 +269,7 @@ def get_posts(username, posts=30):
 
     # GraphQL query parameters with the username and number of posts
     data = {
-        # "av": "17841409795510157",
-        # "__d": "www",
-        # "__user": "0",
-        # "__a": "1",
-        # "__req": "1k",
-        # "__hs": "20149.HYP:instagram_web_pkg.2.1...1",
-        # "dpr": "1",
-        # "__ccg": "EXCELLENT",
-        # "__rev": "1020522147",
-        # "__s": "un3lap:dtv0g6:ocpd5e",
-        # "__hsi": "7477116263966954821",
-        # "__dyn": "7xeUjG1mxu1syUbFp41twpUnwgU7SbzEdF8aUco2qwJxS0DU2wx609vCwjE1EE2Cw8G11wBz81s8hwGxu786a3a1YwBgao6C0Mo2swtUd8-U2zxe2GewGw9a361qw8Xxm16wUwtE1wEbUGdG1QwTU9UaQ0Lo6-3u2WE5B08-269wr86C1mwPwUQp1yUb8jK5V8aUuwm8jxK2K2G0EoKmUhw",
-        # "__csr": "iM9A5cIh5l2vsIJY_nQBRbWRAQqjRAGR8vbHG_hJ6Eyy5uajKq4ox4yV4FlZqt4Rp4_G8yZBDQCUTAl29-mK8ykC-ES_V8GVogALADHhbK9yA8x65ppmlhoKbUjBovpoJ4USbglxdy8SiElGiE-mWxt2Ey48vAG3m7801dZpo5mro2tp9Aigg68-6p6dwa20zu2kEcrBw89w6bgrg0H20lm0cvw2pE5SUS13pP0_xe9Umg8o2iw5kCP95lAizv83elk0FA1izEegCj5x8jwat1G1kx23Wlj0a9a4UrZ0_88wnU4i1hw1i6y00nZqw6Nw1oK",
-        # "__comet_req": "7",
-        # "fb_dtsg": "NAcPHmr6C42mr_tng7yHPFwtqAY6z6FO1HF1PmfhRDOQ7VFARmy2BeA:17854477105113577:1730355965",
-        # "jazoest": "26110",
-        # "lsd": "o2qSYT0-MhEFbe1L-2q2kO",
-        # "__spin_r": "1020522147",
-        # "__spin_b": "trunk",
-        # "__spin_t": "1740901792",
-        # "fb_api_caller_class": "RelayModern",
-        # "fb_api_req_friendly_name": "PolarisProfilePostsTabContentQuery_connection",
         "variables": f'{{"after":null,"before":null,"data":{{"count":{posts},"include_reel_media_seen_timestamp":true,"include_relationship_info":true,"latest_besties_reel_media":true,"latest_reel_media":true}},"first":{posts},"last":null,"username":"{username}","__relay_internal__pv__PolarisIsLoggedInrelayprovider":true,"__relay_internal__pv__PolarisShareSheetV3relayprovider":true}}',
-        # "server_timestamps": "true",
         "doc_id": "9218791164857396"
     }
 
@@ -383,216 +391,240 @@ def process_instagram_data(profile, posts):
 
     return final_data
 
-def is_valid_url(url):
-    """
-    Check given url is correct url or not
-    """
-    regex = re.compile(
-        r'^(https?:\/\/)?'          # Optional http or https
-        r'([a-zA-Z0-9-]+\.)+'       # Subdomain or domain
-        r'[a-zA-Z]{2,}'             # Domain extension (like .com, .org)
-        r'(:\d+)?'                  # Optional port
-        r'(\/\S*)?$'                # Optional path
+def extract_video_id(url):
+    """Extract video ID from YouTube URL."""
+    video_id_match = re.search(r"v=([a-zA-Z0-9_-]{11})", url)
+    return video_id_match.group(1) if video_id_match else None
+
+def get_comments(video_id):
+    """Fetch comments from YouTube API."""
+    comments = []
+    request = youtube.commentThreads().list(
+        part="snippet",
+        videoId=video_id,
+        maxResults=100
     )
-    return bool(regex.match(url))
+    response = request.execute()
 
-def filter_token(json_data):
-    token = None
+    while response:
+        for item in response['items']:
+            snippet = item['snippet']['topLevelComment']['snippet']
+            comment = snippet['textDisplay']
+            comments.append(comment)
+            # comments.append({
+            #     "Author": snippet['authorDisplayName'],
+            #     "Comment": snippet['textDisplay'],
+            #     "Author Profile": snippet['authorProfileImageUrl'],
+            #     "Author Channel": snippet['authorChannelUrl'],
+            #     "Created At": snippet['publishedAt'],
+            #     "Updated At": snippet['updatedAt']
+            # })
+
+        if 'nextPageToken' in response:
+            request = youtube.commentThreads().list(
+                part="snippet",
+                videoId=video_id,
+                pageToken=response['nextPageToken'],
+                maxResults=100
+            )
+            response = request.execute()
+        else:
+            break
+
+    return comments
+
+def analyze_sentiment(comment):
+    """Perform sentiment analysis using VADER."""
+    score = sia.polarity_scores(comment)['compound']
+    return 1 if score > 0.05 else 0 if score < -0.05 else 1
+
+def translate_comment(comment):
+    """Translate non-English comments using Google Translator."""
     try:
-        token = json_data["contents"]["twoColumnWatchNextResults"]["results"]["results"]["contents"][-1]["itemSectionRenderer"]["contents"][0]["continuationItemRenderer"]["continuationEndpoint"]["continuationCommand"]["token"]
-    except Exception as err:
-        print('Error', err)
-    return token
+        lang = detect(comment)
+        if lang != "en":
+            return GoogleTranslator(source='auto', target='en').translate(comment)
+        return comment
+    except:
+        return comment
 
-def scrape_token(video_url):
-    token = None
+def get_wordnet_pos(treebank_tag):
+    """
+    Convert POS tags from Penn Treebank format to WordNet format for lemmatization.
 
-    try:
-        headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
-        }
-        response = requests.get(video_url, timeout=10, headers=headers)
-        if response.status_code == 200:
-            soup = BeautifulSoup(response.text, 'html.parser')
-            scripts = soup.find_all('script')
-            if scripts:
-                match = re.search(r'(\{.*\})', str(scripts[46]))
-                if match:
-                    json_data = json.loads(match.group(1))
-                    token = filter_token(json_data)
-                else:
-                    print("No JSON-like object found")
-            else:
-                print('No matching <script> tags found')
-    except Exception as err:
-        print('Error:', err)
+    Parameters:
+    - treebank_tag (str): POS tag in Penn Treebank format.
 
-    return token
-
-def extract_continuation_command(data):
-    if isinstance(data, dict):
-        for key, value in data.items():
-            if key == "continuationCommand" and isinstance(value, dict):
-                return value.get("token")
-            result = extract_continuation_command(value)
-            if result:
-                return result
-    elif isinstance(data, list):
-        for item in data:
-            result = extract_continuation_command(item)
-            if result:
-                return result
-    return None
-
-def video_comments(video_url, token, total_comments_count, c):
-    url = 'https://www.youtube.com/youtubei/v1/next?prettyPrint=false'
-    headers = {
-        "Cookie": "LOGIN_INFO=AFmmF2swRgIhAKFC9HF0waQ-DkfrRPiMcsPDVT5S9fpRtpyykPWP3o80AiEAtojvJVtPG9R0qrYbQ7eVVc-GQFRqSP6NLN_7ryOG1RA:QUQ3MjNmeVE1VmF2LVFUeGhFY0dNMGJHdUtnOVRubG9SWHZ4eFdEVUxhc0lsUUJNZXJoUXJObzRmVTd3eUtMMGFmemZHUVIxenlZMXhYQ0tTNDFsS29jRkpGZmo2ZEhoQXVNV1hWYXFPMDhuSnBfYlJ3QzhNSGp5LWY1amRxV1g0MVZWMUVzODZGR1BZNUlqbmpGcnMzNVVrZGt3VFhyUC1n; VISITOR_INFO1_LIVE=zXxFUxNYULU; VISITOR_PRIVACY_METADATA=CgJJThIEGgAgOA%3D%3D; HSID=AoNFZi0DNQIBFd_Cv; SSID=A11c6GpVw-7LlSeJA; APISID=4R0A_U_etOT3jYJ9/A1nBp0LMfhB16HmKc; SAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-1PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; __Secure-3PAPISID=brzrbmmtKF9ud2UX/AbHtLUo0AEhYmmI_J; SID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgrjbc8JEkgke6VpDSg7rYFAACgYKAX8SARASFQHGX2MiK4Ssz74Cac0TufTXexzgsRoVAUF8yKqihxmizdlk4JUPO5t1voCU0076; __Secure-1PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgPHlRQFHioNr-zIMyfvmXgQACgYKAaQSARASFQHGX2MiTjqyXGV08AM8XEHhfUj1lBoVAUF8yKoOKWAAJ6IustZPehgpx1Ec0076; __Secure-3PSID=g.a000twj9WsskBlDsKij4ojXOrAyxal3kLIaeE2ocybttohIb9-lgm1uvrig348MINIjL08BAagACgYKAcwSARASFQHGX2MiqypJigxPiv8qY_vTzeWegBoVAUF8yKpz9VAUysLKEey5Q_6Mt8DP0076; PREF=tz=Asia.Calcutta&f4=4000000&f7=150&f6=40000000; YSC=tV--KsiT4Dw; __Secure-ROLLOUT_TOKEN=COClz9Gn5aXa9QEQ_MWQ-KPXiQMY5-3Q-_z1iwM%3D; __Secure-1PSIDTS=sidts-CjEBEJ3XV7OF4DtWBrsJVOnldfWNOyC-zPxKkc6ytWzX0XmCn3SZJkHtxkII1p33Fz_TEAA; __Secure-3PSIDTS=sidts-CjEBEJ3XV7OF4DtWBrsJVOnldfWNOyC-zPxKkc6ytWzX0XmCn3SZJkHtxkII1p33Fz_TEAA; SIDCC=AKEyXzXBv_Y-qG23Z26Kzch9nY5-ZHcpo0QmWcNe6GcKW6Hg9GdDjl5kYQV8kgmSLlUHKUa-PQ; __Secure-1PSIDCC=AKEyXzX6Ujm1z_SUSMf0r4thZZgd_84kDV6_x1Jff7CkgMrF4-g5rhg6QjqSxhg9oXRyIWHcDQ; __Secure-3PSIDCC=AKEyXzW-XbcQrs1OKgEG88ffdeZVb-Csx1TOsFmeNvD7yT9LxvBOvqrqdW9I5QpNLXMAxOrNKI0; ST-amrb2j=session_logininfo=AFmmF2swRgIhAKFC9HF0waQ-DkfrRPiMcsPDVT5S9fpRtpyykPWP3o80AiEAtojvJVtPG9R0qrYbQ7eVVc-GQFRqSP6NLN_7ryOG1RA%3AQUQ3MjNmeVE1VmF2LVFUeGhFY0dNMGJHdUtnOVRubG9SWHZ4eFdEVUxhc0lsUUJNZXJoUXJObzRmVTd3eUtMMGFmemZHUVIxenlZMXhYQ0tTNDFsS29jRkpGZmo2ZEhoQXVNV1hWYXFPMDhuSnBfYlJ3QzhNSGp5LWY1amRxV1g0MVZWMUVzODZGR1BZNUlqbmpGcnMzNVVrZGt3VFhyUC1n",
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36",
-        "X-Goog-Visitor-Id": "Cgt6WHhGVXhOWVVMVSjWtae-BjIKCgJJThIEGgAgOA%3D%3D",
-    }
-    
-    json_data = {
-        "context": {
-            "client": {
-                "hl": "en",
-                "gl": "IN",
-                "remoteHost": "223.178.212.205",
-                "deviceMake": "",
-                "deviceModel": "",
-                "visitorData": "Cgt6WHhGVXhOWVVMVSiy6qy-BjIKCgJJThIEGgAgOA%3D%3D",
-                "userAgent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/133.0.0.0 Safari/537.36,gzip(gfe)",
-                "clientName": "WEB",
-                "clientVersion": "2.20250304.01.00",
-                "osName": "Windows",
-                "osVersion": "10.0",
-                "originalUrl": "https://www.youtube.com/",
-                "screenPixelDensity": 1,
-                "platform": "DESKTOP",
-                "clientFormFactor": "UNKNOWN_FORM_FACTOR",
-                "configInfo": {
-                    "appInstallData": "CLLqrL4GEOHssAUQhL3OHBDL0bEFEOODuCIQ3q2xBRDv2c4cELby_xIQndCwBRCBzc4cEM3RsQUQ39zOHBCdprAFEPirsQUQ4OD_EhCU_rAFEJPZzhwQ8OLOHBCHrM4cENuvrwUQntvOHBC36v4SEMnmsAUQ0-GvBRCv5c4cELfbzhwQudnOHBC9irAFEN_YzhwQkYz_EhDk5_8SEIiHsAUQ1tjOHBC9tq4FEParsAUQ29rOHBDs3s4cEInorgUQmY2xBRCmmrAFEImwzhwQztrOHBCZmLEFEPyyzhwQ18GxBRDgzbEFEN68zhwQ-d3OHBCy6c4cEI3MsAUQiOOvBRC85rAFEInt_xIQyfevBRDM364FEJT8rwUQluTOHBC9mbAFEOLUrgUQ6-j-EhC72c4cELbgzhwQgNHOHBCQsM4cEJbezhwQo_j_EhCq2s4cEM-wzhwqKENBTVNHaFVSb0wyd0ROSGtCdlB0OFF1UDlBN3Ytd2JMSUxiREF4MEg%3D",
-                    "coldConfigData": "CLLqrL4GEO-6rQUQvbauBRDi1K4FEL2KsAUQndCwBRDP0rAFELzmsAUQ4_iwBRCkvrEFENfBsQUQktSxBRCJsM4cEJCwzhwQqLDOHBDPsM4cEPayzhwQ_LLOHBDkx84cEJHMzhwQqM7OHBCA0c4cENHWzhwQ5dbOHBDf2M4cEKrazhwQztrOHBCE284cEJPbzhwQntvOHBC3284cEN_czhwQ-d3OHBCW3s4cEOzezhwQvN_OHBC24M4cEPfhzhwQ8OLOHBCW5M4cEPLkzhwQr-XOHBCy6c4cEMjpzhwQh-vOHBDjg7giGjJBT2pGb3gzY0JNQjZ3Sl8xNmcyc1dwV2gzOTdhcVR6TjliME92aTBRbkhTTFdXMVZUUSIyQU9qRm94MXd3NVJCODRYcmtHeDVJdGtSS2FpU0NuWDZiMFV6Z1ZiR09MSGVuNk5BeFEqbENBTVNTdzBadU4yM0F0NFV6ZzJYSDZncXRRUzlGZjBEdXNlYkVQSVZ0d1AyRWFrVUZTNlpzYmNmaGFRRm1yc0dfMW00Z0FJRTVRU3Ryd2JqRWFnVjMxdThxZ2JXUHNkczMzcThpd2J2S0E9PQ%3D%3D",
-                    "coldHashData": "CLLqrL4GEhQxNDE0NzI1NzY1NDc2ODQ3MzM2Mhiy6qy-BjIyQU9qRm94M2NCTUI2d0pfMTZnMnNXcFdoMzk3YXFUek45YjBPdmkwUW5IU0xXVzFWVFE6MkFPakZveDF3dzVSQjg0WHJrR3g1SXRrUkthaVNDblg2YjBVemdWYkdPTEhlbjZOQXhRQmxDQU1TU3cwWnVOMjNBdDRVemcyWEg2Z3F0UVM5RmYwRHVzZWJFUElWdHdQMkVha1VGUzZac2JjZmhhUUZtcnNHXzFtNGdBSUU1UVN0cndiakVhZ1YzMXU4cWdiV1BzZHMzM3E4aXdidktBPT0%3D",
-                    "hotHashData": "CLLqrL4GEhQxMzEzNDE1NDE5NDQ0MzI1MTIwMhiy6qy-BiiU5PwSKKXQ_RIonpH-EijIyv4SKLfq_hIowIP_EiiRjP8SKLSj_xIopcf_Eii9zv8SKOvZ_xIo4OD_Eijk5_8SKInt_xIo0u3_Eij77f8SKNru_xIotvL_EijN8_8SKMT3_xIoo_j_EjIyQU9qRm94M2NCTUI2d0pfMTZnMnNXcFdoMzk3YXFUek45YjBPdmkwUW5IU0xXVzFWVFE6MkFPakZveDF3dzVSQjg0WHJrR3g1SXRrUkthaVNDblg2YjBVemdWYkdPTEhlbjZOQXhRQixDQU1TSFEwTW90ZjZGYTdCQnBOTjhnb1ZDZDNQd2d6R3AtMEwyTTBKcGNBRg%3D%3D"
-                },
-                "screenDensityFloat": 1.25,
-                "userInterfaceTheme": "USER_INTERFACE_THEME_DARK",
-                "timeZone": "Asia/Calcutta",
-                "browserName": "Chrome",
-                "browserVersion": "133.0.0.0",
-                "acceptHeader": "text/html,application/xhtml+xml,application/xml;q=0.9,image/avif,image/webp,image/apng,*/*;q=0.8,application/signed-exchange;v=b3;q=0.7",
-                "deviceExperimentId": "ChxOelEzT1RFek1EQTVOakkyTURZek1UVXdPUT09ELLqrL4GGLLqrL4G",
-                "rolloutToken": "COClz9Gn5aXa9QEQ_MWQ-KPXiQMYspmwr5n7iwM%3D",
-                "screenWidthPoints": 1536,
-                "screenHeightPoints": 360,
-                "utcOffsetMinutes": 330,
-                "connectionType": "CONN_CELLULAR_4G",
-                "memoryTotalKbytes": "8000000",
-                "mainAppWebInfo": {
-                    "graftUrl": video_url,
-                    "pwaInstallabilityStatus": "PWA_INSTALLABILITY_STATUS_CAN_BE_INSTALLED",
-                    "webDisplayMode": "WEB_DISPLAY_MODE_BROWSER",
-                    "isWebNativeShareAvailable": True
-                }
-            },
-            "user": {
-                "lockedSafetyMode": False
-            },
-            "request": {
-                "useSsl": True,
-                "internalExperimentFlags": [],
-                "consistencyTokenJars": []
-            },
-            "clickTracking": {
-                "clickTrackingParams": "CNIDELsvGAMiEwjzy-KDyviLAxXyb50JHeIIHB8="
-            }
-        },
-        "continuation": token
-    }
-
-    response = requests.post(url, headers=headers, timeout=10, json=json_data)
-    token = None
-    fetched_comments = []
-    # total_comments_count = 0
-    if response.status_code == 200:
-        data = response.json()
-        try:
-            token_key = ''
-            for key in data['onResponseReceivedEndpoints'][-1].keys():
-                if 'Continuation' in key:
-                    token_key = key
-                    break
-            token = extract_continuation_command(data['onResponseReceivedEndpoints'][-1][token_key]['continuationItems'][-1])
-        except KeyError as err:
-            print('Error in token:', err)
-            pass
-
-        with open(f'data/{c}.json', 'w') as f:
-            json.dump(data, f, indent=4)
-
-        if not total_comments_count:
-            try:
-                total_comments_count = data['onResponseReceivedEndpoints'][0]['reloadContinuationItemsCommand']['continuationItems'][0]['commentsHeaderRenderer']['countText']['runs'][0]['text']
-            except KeyError as err:
-                # print('Error in total comments count:', err)
-                pass
-
-        comments_data = data['frameworkUpdates']['entityBatchUpdate']['mutations']
-        for i, comment in enumerate(comments_data):
-            try:
-                payload = comment['payload']['commentEntityPayload']
-                fetched_comments.append(
-                    {
-                        'text': payload['properties']['content']['content'],
-                        'time': payload['properties']['publishedTime'],
-                        'owner': payload['author']['displayName'],
-                        'owner_avtar': payload['author']['avatarThumbnailUrl'],
-                        'likes': payload['toolbar']['likeCountLiked'],
-                        'dislikes': payload['toolbar']['likeCountNotliked'],
-                        'channel_url': f"https://www.youtube.com/{payload['author']['displayName']}",
-                    }
-                )
-            except KeyError as err:
-                # print('Error in comments:', err)
-                pass
+    Returns:
+    - WordNet POS tag if applicable, else default to 'n' (noun).
+    """
+    if treebank_tag.startswith('J'):
+        return wordnet.ADJ  # Adjective
+    elif treebank_tag.startswith('V'):
+        return wordnet.VERB  # Verb
+    elif treebank_tag.startswith('N'):
+        return wordnet.NOUN  # Noun
+    elif treebank_tag.startswith('R'):
+        return wordnet.ADV  # Adverb
     else:
-        print('Something went wrong! Error Code:', response.status_code)
+        return wordnet.NOUN  # Default to noun
 
-    return total_comments_count, fetched_comments, token
+def text_pre_processing(text):
+    """
+    Preprocesses a given text by removing HTML tags, converting emojis to text,
+    tokenizing, normalizing case, removing stop words, and lemmatizing words.
+    """
+    # Remove HTML tags
+    clean_text = re.sub(r'<.*?>', '', text)
+
+    # Remove special characters (keep only words, numbers, and spaces)
+    clean_text = re.sub(r'[^a-zA-Z0-9\s]', '', clean_text)
+
+    # Convert emojis to their textual representation
+    clean_text = emoji.demojize(clean_text).replace('_', ' ')
+
+    # Convert to lowercase
+    clean_text = clean_text.lower()
+
+    # Normalize spaces (removes extra spaces and newlines)
+    clean_text = ' '.join(clean_text.split())
+
+    # Tokenize the text
+    words = word_tokenize(clean_text)
+
+    # Remove stop words
+    words = [word for word in words if word not in stop_words]
+
+    # Get POS tags
+    pos_tags = pos_tag(words)
+
+    # Lemmatize words using their POS tags
+    lemmatized_sentence = [lemmatizer.lemmatize(word, get_wordnet_pos(tag)) for word, tag in pos_tags]
+
+    # Join words back into a sentence
+    return ' '.join(lemmatized_sentence)
+
+def text_emotion(text):
+    """
+    Detects the primary emotion in a given text using a pre-trained emotion classification model.
+
+    Parameters:
+        text (str): The input text for emotion analysis.
+
+    Returns:
+        str: The detected emotion (e.g., "Happy", "Sad", "Angry", etc.).
+    """
+
+    # Analyze the text using the pre-trained classifier
+    result = text_classifier(text)
+
+    # Extract the emotion label and capitalize the first letter
+    return result['label'].capitalize()
+
+def final_sentiment_result(comments, results):
+    words = [comment.split() for comment in comments]
+    words = [word for sublist in words for word in sublist if len(word) > 2]
+    word_counts = Counter(words)
+    most_common_words = word_counts.most_common(25)
+    most_common_words = [word for word, _ in most_common_words]
+
+    st = time.time()
+    with concurrent.futures.ProcessPoolExecutor() as executor:
+        emotions = list(executor.map(text_emotion, comments))
+    print(f'Emotion detection completed in {int(time.time() - st)}s')
+    print('Emotions:', emotions)
+
+    pos = results.count(1)
+    neg = results.count(0)
+    total = len(results)
+    pos_percent = round((pos / total) * 100, 2)
+    neg_percent = round((neg / total) * 100, 2)
+
+    if pos > neg:
+        video_type = "This video is mostly positive based on viewer comments."
+    elif neg > pos:
+        video_type = "This video is mostly negative based on viewer comments."
+    else:
+        video_type = "This video has a balanced mix of positive and negative comments."
+
+    final_result = {}
+    overall_result = {
+        'neg': f'{neg_percent}%',
+        'pos': f'{pos_percent}%',
+        'video_type': video_type
+    }
+
+    final_result['ove_res'] = overall_result
+    final_result['graph_data'] = {'pos': pos, 'neg': neg, 'total': total}
+    final_result['most_common_words'] = most_common_words
+    return final_result
+
+def process_batch(comments_batch):
+    """Ek batch ka pura processing flow handle karega"""
+    
+    print(f'Processing batch of {len(comments_batch)} comments...')
+    
+    # 1. Translate comments
+    with concurrent.futures.ThreadPoolExecutor(max_workers=4) as executor:
+        translated_comments = list(executor.map(translate_comment, comments_batch))
+
+    # 2. Pre-process comments
+    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+        pre_processed_comments = list(executor.map(text_pre_processing, translated_comments))
+
+    # 3. Sentiment analysis
+    with concurrent.futures.ProcessPoolExecutor(max_workers=4) as executor:
+        sentiment_results = list(executor.map(analyze_sentiment, pre_processed_comments))
+    
+    return pre_processed_comments, sentiment_results
+
+def ytb_comments_sentiment_analysis(video_url):
+    """Main function to fetch comments and perform sentiment analysis."""
+    st = time.time()
+    video_id = extract_video_id(video_url)
+    if not video_id:
+        print("Invalid YouTube URL.")
+        return
+
+    print('Fetching comments...')
+    start_time = time.time()
+    comments = get_comments(video_id)
+    print(f'Fetched {len(comments)} comments in {int(time.time() - start_time)}s')
+
+    # # Parallel translation of non-English comments
+    # print('Translating comments...')
+    # start_time = time.time()
+    # with concurrent.futures.ThreadPoolExecutor() as executor:
+    #     translated_comments = list(executor.map(translate_comment, comments))
+    # print(f'Translation completed in {int(time.time() - start_time)}s')
+
+    # # Pre processing on comments
+    # start_time = time.time()
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
+    #     pre_processed_comments = list(executor.map(text_pre_processing, translated_comments))
+
+    # # Sentiment analysis on comments
+    # start_time = time.time()
+    # with concurrent.futures.ProcessPoolExecutor() as executor:
+    #     sentiment_results = list(executor.map(analyze_sentiment, pre_processed_comments))
+    # print(f'Sentiment analysis completed in {int(time.time() - start_time)}s')
+    all_preprocessed = []
+    all_results = []
+    BATCH_SIZE = 200
+    comment_batches = [comments[i:i+BATCH_SIZE] for i in range(0, len(comments), BATCH_SIZE)]
+    for batch in comment_batches:
+        pre_processed_comments, sentiment_results = process_batch(batch)
+        all_preprocessed.extend(pre_processed_comments)
+        all_results.extend(sentiment_results)
+
+    result = final_sentiment_result(all_preprocessed, all_results)
+    print('Result:', result)
+    print(f'Full process completed in {int(time.time() - st)}s')
 
 
 if __name__ == '__main__':
-    url = input('Enter a video URL: ')
-    if is_valid_url(url):
-        st = time.time()
-        token = scrape_token(url)
-        total_comments = 0
-        fetched_comments = []
-        counter = 0
-        while token is not None:
-            counter += 1
-            total_comments, comments, token = video_comments(url, token, total_comments, counter)
-            if comments:
-                total_comments = int(str(total_comments).replace(",", ""))
-                fetched_comments.extend(comments)
-
-            spent_time = int(time.time() - st)
-            if spent_time >= 60: # Process only for 1 minute
-                print(f'Spent {spent_time} seconds, stopping process stopped due to long time process.')
-                break
-            if not comments:
-                print('No comments')
-                break
-            if not token:
-                print('No token')
-                break
-
-        et = time.time()
-        with open('comments.json', 'w') as f:
-            json.dump(fetched_comments, f, indent=3)
-
-        print('Time:', int(et-st))
-        print('Total comments:', len(fetched_comments))
-    else:
-        print("❌ Invalid URL")
+    url = 'https://www.youtube.com/watch?v=sxmFfNLT4tI'
+    api_key = "AIzaSyDtNHmz8N5bGVV24aAwQw4h3B3mbSccCjc" 
+    youtube = build("youtube", "v3", developerKey=api_key)
+    # url = input('Enter a video URL: ')
+    ytb_comments_sentiment_analysis(url)

@@ -1,0 +1,27 @@
+1. Summary of Video Sentiment
+Show an overall sentiment score (Positive, Neutral, Negative) based on the analysis of comments.
+Display a message like "This video is mostly positive/negative based on viewer comments."
+
+2. Sentiment Graphs & Visualization
+Pie Chart: To show the proportion of positive, neutral, and negative comments.
+Bar Chart: To show the count of each sentiment type.
+
+3. Comment Word Cloud
+Display a word cloud to highlight the most frequently used words in comments.
+Useful to see common emotions or topics being discussed.
+
+4. Top Positive & Negative Comments
+Show the most liked positive and most liked negative comments separately.
+Helps users understand why people liked or disliked the video.
+
+5. Emotion Analysis (Optional)
+Instead of just Positive/Negative, classify comments into Joy, Sadness, Anger, Surprise, Love, Fear, etc.
+This can be shown as a stacked bar chart for a better breakdown.
+
+6. Comparison Feature (Optional)
+Allow users to input two different video URLs and compare their sentiment side by side.
+Useful for comparing two similar videos.
+
+7. Trend Analysis (Optional)
+Fetch comments over time and analyze whether sentiment is changing (e.g., was it positive at first but became negative later?).
+Display this in a line graph.
